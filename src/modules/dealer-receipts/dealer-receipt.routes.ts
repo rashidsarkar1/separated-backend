@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import mongoose from "mongoose";
@@ -12,7 +13,7 @@ interface DealerReceiptRecord {
   dealerName: string;
   note: string;
   imageData: string;
-  imageFileName: string;
+  imageFileName?: string;
   createdAt: string;
 }
 
@@ -26,9 +27,9 @@ export interface DealerReceiptMongoDocument {
   dealerName: string;
   note: string;
   imageData: string;
-  imageFileName: string;
-  imageContentType: string;
-  imageBuffer: Buffer;
+  imageFileName?: string;
+  imageContentType?: string;
+  imageBuffer?: Buffer;
   createdAt: string;
 }
 
@@ -37,6 +38,49 @@ const useMongoStorage = process.env.VERCEL === "1";
 const receiptsDirectory = path.join(process.cwd(), "data", "dealer-receipts");
 const imagesDirectory = path.join(receiptsDirectory, "images");
 const metadataPath = path.join(receiptsDirectory, "receipts.json");
+
+async function uploadReceiptImage(
+  imageData: string,
+  id: string,
+): Promise<string> {
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
+  const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
+  const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
+  if (!cloudName || !apiKey || !apiSecret) {
+    throw new Error(
+      "Cloudinary is not configured. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET.",
+    );
+  }
+
+  const timestamp = Math.floor(Date.now() / 1000);
+  const folder = "dealer-receipts";
+  const publicId = id;
+  const signatureParameters = `folder=${folder}&public_id=${publicId}&timestamp=${timestamp}`;
+  const signature = createHash("sha1")
+    .update(`${signatureParameters}${apiSecret}`)
+    .digest("hex");
+  const form = new FormData();
+  form.append("file", imageData);
+  form.append("api_key", apiKey);
+  form.append("timestamp", String(timestamp));
+  form.append("folder", folder);
+  form.append("public_id", publicId);
+  form.append("signature", signature);
+
+  const response = await fetch(
+    `https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudName)}/image/upload`,
+    { method: "POST", body: form },
+  );
+  const result = (await response.json()) as {
+    secure_url?: string;
+    error?: { message?: string };
+  };
+  if (!response.ok || !result.secure_url) {
+    throw new Error(result.error?.message || "Cloudinary image upload failed");
+  }
+
+  return result.secure_url;
+}
 
 async function readReceipts(): Promise<DealerReceiptRecord[]> {
   if (useMongoStorage) {
@@ -52,7 +96,9 @@ async function readReceipts(): Promise<DealerReceiptRecord[]> {
       dealerName: String(record.dealerName ?? ""),
       note: String(record.note ?? ""),
       imageData: String(record.imageData ?? ""),
-      imageFileName: String(record.imageFileName ?? ""),
+      ...(record.imageFileName
+        ? { imageFileName: String(record.imageFileName) }
+        : {}),
       createdAt: String(record.createdAt ?? ""),
     }));
   }
@@ -158,8 +204,6 @@ router.post("/", async (req, res) => {
     }
 
     const id = `rcpt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const extension = imageMatch[1] === "jpeg" ? "jpg" : imageMatch[1];
-    const imageFileName = `${id}.${extension}`;
     const record: DealerReceiptRecord = {
       id,
       productId: String(productId || ""),
@@ -167,36 +211,21 @@ router.post("/", async (req, res) => {
       dealerId: String(dealerId),
       dealerName: String(dealerName),
       note: String(note),
-      imageData: `/uploads/dealer-receipts/${imageFileName}`,
-      imageFileName,
+      imageData: await uploadReceiptImage(imageData, id),
       createdAt: createdAt || new Date().toISOString(),
     };
 
     if (useMongoStorage) {
-      const imageContentType = `image/${imageMatch[1] === "jpg" ? "jpeg" : imageMatch[1]}`;
-      await mongoose.connection.collection<DealerReceiptMongoDocument>("dealerReceipts").insertOne({
-        _id: id,
-        ...record,
-        imageContentType,
-        imageBuffer,
-      });
+      await mongoose.connection
+        .collection<DealerReceiptMongoDocument>("dealerReceipts")
+        .insertOne({ _id: id, ...record });
     } else {
-      await mkdir(imagesDirectory, { recursive: true });
-      await writeFile(path.join(imagesDirectory, imageFileName), imageBuffer);
-      try {
-        const receipts = await readReceipts();
-        receipts.unshift(record);
-        await writeReceipts(receipts);
-      } catch (error) {
-        await unlink(path.join(imagesDirectory, imageFileName)).catch(
-          () => undefined,
-        );
-        throw error;
-      }
+      const receipts = await readReceipts();
+      receipts.unshift(record);
+      await writeReceipts(receipts);
     }
 
-    const { imageFileName: _imageFileName, ...response } = record;
-    return res.status(201).json({ success: true, data: response });
+    return res.status(201).json({ success: true, data: record });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
   }
@@ -225,11 +254,13 @@ router.delete("/:id", async (req, res) => {
     }
 
     await writeReceipts(receipts.filter((item) => item.id !== receipt.id));
-    await unlink(
-      path.join(imagesDirectory, path.basename(receipt.imageFileName)),
-    ).catch((error: any) => {
-      if (error.code !== "ENOENT") throw error;
-    });
+    if (receipt.imageFileName) {
+      await unlink(
+        path.join(imagesDirectory, path.basename(receipt.imageFileName)),
+      ).catch((error: any) => {
+        if (error.code !== "ENOENT") throw error;
+      });
+    }
     return res.json({ success: true, data: null });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });

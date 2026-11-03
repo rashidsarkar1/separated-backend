@@ -80,7 +80,7 @@ export function DealerReceiptUploader({
         onPendingChange?.([...pendingReceipts, ...created]);
       } else if (persistNow) {
         onSaved?.();
-        toast.success("Dealer receipt saved in project folder");
+        toast.success("Dealer receipt saved to Cloudinary");
       }
 
       setNote("");
@@ -103,7 +103,7 @@ export function DealerReceiptUploader({
           Dealer Receipt Image
         </label>
         <span className="text-[10px] font-semibold text-slate-400">
-          Camera or gallery • saved in local folder
+          Camera or gallery • saved to Cloudinary
         </span>
       </div>
 
@@ -189,8 +189,8 @@ export function DealerReceiptUploader({
 
       <p className="text-[11px] text-slate-500">
         Add one receipt now, then upload another each time you buy this product
-        again. Images are saved in the server's local folder and appear on the
-        product details page.
+        again. Images are stored in Cloudinary and appear on the product details
+        page.
       </p>
     </div>
   );
