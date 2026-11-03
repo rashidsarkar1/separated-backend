@@ -1,14 +1,13 @@
 [
   {
-    "id": "rcpt_1793687968168_xknyq8",
-    "productId": "6ae981a0eeeb3aecc7a700bd",
-    "productName": "6202 fnd |",
+    "id": "rcpt_1793693212862_e72o1x",
+    "productId": "",
+    "productName": "",
     "dealerId": "6ae8e023235047f49e143f7f",
     "dealerName": "Megna",
     "note": "",
-    "imageData": "/uploads/dealer-receipts/rcpt_1793687968168_xknyq8.jpg",
-    "imageFileName": "rcpt_1793687968168_xknyq8.jpg",
-    "createdAt": "2026-11-03T06:39:13.426Z"
+    "imageData": "https://res.cloudinary.com/hqeq8tuf/image/upload/v1793693215/dealer-receipts/rcpt_1793693212862_e72o1x.jpg",
+    "createdAt": "2026-11-03T08:06:52.803Z"
   },
   {
     "id": "rcpt_1793647153550_rmq942",

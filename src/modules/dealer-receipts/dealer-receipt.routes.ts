@@ -1,7 +1,5 @@
 import { Router } from "express";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
-import path from "node:path";
 import mongoose from "mongoose";
 import { getDateRangeStart } from "../../utils/dateRange";
 
@@ -13,12 +11,11 @@ interface DealerReceiptRecord {
   dealerName: string;
   note: string;
   imageData: string;
-  imageFileName?: string;
   createdAt: string;
 }
 
 export interface DealerReceiptMongoDocument {
-  [key: string]: string | Buffer | undefined;
+  [key: string]: string | undefined;
   _id: string;
   id: string;
   productId: string;
@@ -27,44 +24,53 @@ export interface DealerReceiptMongoDocument {
   dealerName: string;
   note: string;
   imageData: string;
-  imageFileName?: string;
-  imageContentType?: string;
-  imageBuffer?: Buffer;
   createdAt: string;
 }
 
 const router = Router();
-const useMongoStorage = process.env.VERCEL === "1";
-const receiptsDirectory = path.join(process.cwd(), "data", "dealer-receipts");
-const imagesDirectory = path.join(receiptsDirectory, "images");
-const metadataPath = path.join(receiptsDirectory, "receipts.json");
+const receiptsCollectionName = "dealerReceipts";
 
-async function uploadReceiptImage(
-  imageData: string,
-  id: string,
-): Promise<string> {
+function getReceiptsCollection() {
+  if (mongoose.connection.readyState !== 1) {
+    throw new Error("MongoDB is unavailable; dealer receipts cannot be accessed.");
+  }
+  return mongoose.connection.collection<DealerReceiptMongoDocument>(
+    receiptsCollectionName,
+  );
+}
+
+function getCloudinaryConfig() {
   const cloudName = process.env.CLOUDINARY_CLOUD_NAME?.trim();
   const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
   const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
-  if (!cloudName || !apiKey || !apiSecret) {
+  if (
+    !cloudName ||
+    !apiKey ||
+    !apiSecret ||
+    [cloudName, apiKey, apiSecret].some((value) =>
+      /^(?:\*+|change.?me|your_|replace_)/i.test(value),
+    )
+  ) {
     throw new Error(
-      "Cloudinary is not configured. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET.",
+      "Valid Cloudinary credentials are required. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in the backend environment.",
     );
   }
+  return { cloudName, apiKey, apiSecret };
+}
 
+async function uploadReceiptImage(imageData: string, id: string): Promise<string> {
+  const { cloudName, apiKey, apiSecret } = getCloudinaryConfig();
   const timestamp = Math.floor(Date.now() / 1000);
   const folder = "dealer-receipts";
-  const publicId = id;
-  const signatureParameters = `folder=${folder}&public_id=${publicId}&timestamp=${timestamp}`;
   const signature = createHash("sha1")
-    .update(`${signatureParameters}${apiSecret}`)
+    .update(`folder=${folder}&public_id=${id}&timestamp=${timestamp}${apiSecret}`)
     .digest("hex");
   const form = new FormData();
   form.append("file", imageData);
   form.append("api_key", apiKey);
   form.append("timestamp", String(timestamp));
   form.append("folder", folder);
-  form.append("public_id", publicId);
+  form.append("public_id", id);
   form.append("signature", signature);
 
   const response = await fetch(
@@ -78,46 +84,64 @@ async function uploadReceiptImage(
   if (!response.ok || !result.secure_url) {
     throw new Error(result.error?.message || "Cloudinary image upload failed");
   }
-
   return result.secure_url;
 }
 
-async function readReceipts(): Promise<DealerReceiptRecord[]> {
-  if (useMongoStorage) {
-    const records = await mongoose.connection
-      .collection<DealerReceiptMongoDocument>("dealerReceipts")
-      .find({}, { projection: { imageBuffer: 0, imageContentType: 0 } })
-      .toArray();
-    return records.map((record) => ({
-      id: String(record.id ?? record._id),
-      productId: String(record.productId ?? ""),
-      productName: String(record.productName ?? ""),
-      dealerId: String(record.dealerId ?? ""),
-      dealerName: String(record.dealerName ?? ""),
-      note: String(record.note ?? ""),
-      imageData: String(record.imageData ?? ""),
-      ...(record.imageFileName
-        ? { imageFileName: String(record.imageFileName) }
-        : {}),
-      createdAt: String(record.createdAt ?? ""),
-    }));
-  }
-
+function getCloudinaryPublicId(imageUrl: string): string | null {
+  let url: URL;
   try {
-    return JSON.parse(
-      await readFile(metadataPath, "utf8"),
-    ) as DealerReceiptRecord[];
-  } catch (error: any) {
-    if (error.code === "ENOENT") return [];
-    throw error;
+    url = new URL(imageUrl);
+  } catch {
+    return null;
+  }
+  if (url.hostname !== "res.cloudinary.com") return null;
+
+  const uploadPath = url.pathname.split("/upload/")[1];
+  if (!uploadPath) return null;
+  const publicId = uploadPath.replace(/^v\d+\//, "").replace(/\.[^/.]+$/, "");
+  return publicId.startsWith("dealer-receipts/") ? publicId : null;
+}
+
+async function deleteCloudinaryImage(imageUrl: string): Promise<void> {
+  const publicId = getCloudinaryPublicId(imageUrl);
+  if (!publicId) return;
+
+  const { cloudName, apiKey, apiSecret } = getCloudinaryConfig();
+  const timestamp = Math.floor(Date.now() / 1000);
+  const signature = createHash("sha1")
+    .update(`public_id=${publicId}&timestamp=${timestamp}${apiSecret}`)
+    .digest("hex");
+  const form = new FormData();
+  form.append("public_id", publicId);
+  form.append("api_key", apiKey);
+  form.append("timestamp", String(timestamp));
+  form.append("signature", signature);
+
+  const response = await fetch(
+    `https://api.cloudinary.com/v1_1/${encodeURIComponent(cloudName)}/image/destroy`,
+    { method: "POST", body: form },
+  );
+  const result = (await response.json()) as {
+    result?: string;
+    error?: { message?: string };
+  };
+  if (!response.ok || (result.result !== "ok" && result.result !== "not found")) {
+    throw new Error(result.error?.message || "Cloudinary image deletion failed");
   }
 }
 
-async function writeReceipts(receipts: DealerReceiptRecord[]) {
-  await mkdir(receiptsDirectory, { recursive: true });
-  const temporaryPath = `${metadataPath}.tmp`;
-  await writeFile(temporaryPath, JSON.stringify(receipts, null, 2), "utf8");
-  await rename(temporaryPath, metadataPath);
+async function readReceipts(): Promise<DealerReceiptRecord[]> {
+  const records = await getReceiptsCollection().find({}).toArray();
+  return records.map((record) => ({
+    id: String(record.id ?? record._id),
+    productId: String(record.productId ?? ""),
+    productName: String(record.productName ?? ""),
+    dealerId: String(record.dealerId ?? ""),
+    dealerName: String(record.dealerName ?? ""),
+    note: String(record.note ?? ""),
+    imageData: String(record.imageData ?? ""),
+    createdAt: String(record.createdAt ?? ""),
+  }));
 }
 
 router.get("/", async (req, res) => {
@@ -152,8 +176,7 @@ router.get("/", async (req, res) => {
     );
     const total = filtered.length;
     const receipts = filtered
-      .slice((page - 1) * limit, page * limit)
-      .map(({ imageFileName, ...receipt }) => receipt);
+      .slice((page - 1) * limit, page * limit);
 
     return res.json({
       success: true,
@@ -189,17 +212,13 @@ router.post("/", async (req, res) => {
     }
 
     const imageBuffer = Buffer.from(imageMatch[2], "base64");
-    const maxImageSize = useMongoStorage
-      ? 3 * 1024 * 1024
-      : 15 * 1024 * 1024;
+    const maxImageSize = 3 * 1024 * 1024;
     if (imageBuffer.length > maxImageSize) {
       return res
         .status(413)
         .json({
           success: false,
-          message: useMongoStorage
-            ? "Receipt image must be no larger than 3 MB on Vercel"
-            : "Receipt image is too large",
+          message: "Receipt image must be no larger than 3 MB",
         });
     }
 
@@ -215,14 +234,23 @@ router.post("/", async (req, res) => {
       createdAt: createdAt || new Date().toISOString(),
     };
 
-    if (useMongoStorage) {
-      await mongoose.connection
-        .collection<DealerReceiptMongoDocument>("dealerReceipts")
-        .insertOne({ _id: id, ...record });
-    } else {
-      const receipts = await readReceipts();
-      receipts.unshift(record);
-      await writeReceipts(receipts);
+    try {
+      await getReceiptsCollection().insertOne({ _id: id, ...record });
+    } catch (error) {
+      try {
+        await deleteCloudinaryImage(record.imageData);
+      } catch (cleanupError) {
+        const saveMessage =
+          error instanceof Error ? error.message : String(error);
+        const cleanupMessage =
+          cleanupError instanceof Error
+            ? cleanupError.message
+            : String(cleanupError);
+        throw new Error(
+          `Could not save receipt metadata: ${saveMessage}. Cloudinary cleanup failed: ${cleanupMessage}`,
+        );
+      }
+      throw error;
     }
 
     return res.status(201).json({ success: true, data: record });
@@ -233,18 +261,6 @@ router.post("/", async (req, res) => {
 
 router.delete("/:id", async (req, res) => {
   try {
-    if (useMongoStorage) {
-      const result = await mongoose.connection
-        .collection<DealerReceiptMongoDocument>("dealerReceipts")
-        .deleteOne({ _id: req.params.id });
-      if (result.deletedCount === 0) {
-        return res
-          .status(404)
-          .json({ success: false, message: "Receipt not found" });
-      }
-      return res.json({ success: true, data: null });
-    }
-
     const receipts = await readReceipts();
     const receipt = receipts.find((item) => item.id === req.params.id);
     if (!receipt) {
@@ -253,14 +269,8 @@ router.delete("/:id", async (req, res) => {
         .json({ success: false, message: "Receipt not found" });
     }
 
-    await writeReceipts(receipts.filter((item) => item.id !== receipt.id));
-    if (receipt.imageFileName) {
-      await unlink(
-        path.join(imagesDirectory, path.basename(receipt.imageFileName)),
-      ).catch((error: any) => {
-        if (error.code !== "ENOENT") throw error;
-      });
-    }
+    await deleteCloudinaryImage(receipt.imageData);
+    await getReceiptsCollection().deleteOne({ _id: req.params.id });
     return res.json({ success: true, data: null });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });

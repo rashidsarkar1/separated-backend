@@ -1,11 +1,9 @@
 import express, { type Application } from "express";
-import path from "node:path";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import router from "./src/routes/index";
-import type { DealerReceiptMongoDocument } from "./src/modules/dealer-receipts/dealer-receipt.routes";
 import { globalErrorHandler } from "./src/middleware/globalErrorHandler";
 
 dotenv.config();
@@ -75,32 +73,6 @@ app.use(cors({ origin: (origin, callback) => {
 }, credentials: true }));
 app.use(express.json({ limit: runningOnVercel ? "4.2mb" : "20mb" }));
 app.use(cookieParser());
-app.get("/uploads/dealer-receipts/:fileName", async (req, res, next) => {
-  const fileName = path.basename(req.params.fileName);
-  try {
-    if (runningOnVercel) {
-      const receipt = await mongoose.connection
-        .collection<DealerReceiptMongoDocument>("dealerReceipts")
-        .findOne({ imageFileName: fileName });
-      if (receipt?.imageBuffer) {
-        res.type(String(receipt.imageContentType || "application/octet-stream"));
-        res.send(receipt.imageBuffer);
-        return;
-      }
-      res.sendStatus(404);
-      return;
-    }
-
-    res.sendFile(
-      path.join(process.cwd(), "data", "dealer-receipts", "images", fileName),
-      (error) => {
-        if (error) next(error);
-      },
-    );
-  } catch (error) {
-    next(error);
-  }
-});
 app.use((req, _res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
   if (req.method === "POST" && req.path !== "/api/v1/dealer-receipts") console.log("Body:", req.body);

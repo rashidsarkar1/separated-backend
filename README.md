@@ -1,6 +1,6 @@
 # Backend API
 
-Express + TypeScript API with feature-based routes and Mongoose models. Dealer receipt images are uploaded to Cloudinary; only their secure URLs and receipt metadata are stored locally during development or in MongoDB on Vercel.
+Express + TypeScript API with feature-based routes and Mongoose models. Dealer receipt images are uploaded to Cloudinary; only their secure URLs and receipt metadata are stored in the MongoDB `dealerReceipts` collection in every environment.
 
 ## Run
 
@@ -13,18 +13,18 @@ Express + TypeScript API with feature-based routes and Mongoose models. Dealer r
 
 ## Structure
 
-- `server.ts`: Express app, database connection, middleware, receipt image serving, health route, and API mounting
+- `server.ts`: Express app, database connection, middleware, health route, and API mounting
 - `src/routes`: central feature route registration
 - `src/modules/*/*.routes.ts`: feature-specific API routes
 - `src/modules/*/*.model.ts`: Mongoose schemas/models
 - `src/services`: AI integration (in this project, AI backend client)
 - `src/middleware`, `src/shared`, `src/utils`: shared middleware/helpers
-- `data`: local receipt metadata and legacy image files
+- `data/dealer-receipts/receipts.json`: legacy receipt archive; new receipt data is not read from or written to this file
 
-The original API implementation uses feature route files for request handling and includes Mongoose models. Existing in-memory fallback behavior remains when MongoDB cannot connect.
+Receipt upload, listing, and deletion require a reachable MongoDB connection; receipt metadata is never stored in a local JSON file. The in-memory fallback for other application data remains when MongoDB cannot connect.
 
 ## Deploy to Vercel
 
 1. Configure `MONGODB_URI`, `JWT_SECRET`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `CLIENT_URL`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` in the Vercel project environment. Add `GEMINI_API_KEY` if AI routes are needed. Do not commit `.env` or paste secrets into source files.
 2. Authenticate with the Vercel CLI (`npx vercel login`), link this directory (`npx vercel link`), then deploy with `npx vercel --prod`.
-3. Receipt images are stored in Cloudinary, with only their secure URLs saved in MongoDB. Because of Vercel's request-size limit, Vercel receipt uploads are limited to 3 MB per image; local development keeps the 15 MB limit.
+3. Receipt images are stored in Cloudinary, with only their secure URLs and metadata saved in the MongoDB `dealerReceipts` collection. Receipt uploads are limited to 3 MB per image.
