@@ -1,0 +1,46 @@
+[
+  {
+    "id": "rcpt_1793647153550_rmq942",
+    "productId": "",
+    "productName": "",
+    "dealerId": "6ae8e010235047f49e143f7b",
+    "dealerName": "Akij",
+    "note": "",
+    "imageData": "/uploads/dealer-receipts/rcpt_1793647153550_rmq942.jpg",
+    "imageFileName": "rcpt_1793647153550_rmq942.jpg",
+    "createdAt": "2026-11-02T19:19:13.547Z"
+  },
+  {
+    "id": "rcpt_1793646726605_8iz0wt",
+    "productId": "6ae8e086235047f49e143fd8",
+    "productName": "NBC spandle",
+    "dealerId": "6ae8e010235047f49e143f7b",
+    "dealerName": "Akij",
+    "note": "",
+    "imageData": "/uploads/dealer-receipts/rcpt_1793646726605_8iz0wt.jpg",
+    "imageFileName": "rcpt_1793646726605_8iz0wt.jpg",
+    "createdAt": "2026-11-02T19:11:48.692Z"
+  },
+  {
+    "id": "rcpt_1793641054723_scrbl3",
+    "productId": "6ae8a6a744eefd49ad5e131e",
+    "productName": "Spandle",
+    "dealerId": "6ae8a63f44eefd49ad5e1308",
+    "dealerName": "Megna",
+    "note": "",
+    "imageData": "/uploads/dealer-receipts/rcpt_1793641054723_scrbl3.jpg",
+    "imageFileName": "rcpt_1793641054723_scrbl3.jpg",
+    "createdAt": "2026-11-02T17:37:34.719Z"
+  },
+  {
+    "id": "rcpt_1793631661063_ltwndd",
+    "productId": "6ae8a5ad44eefd49ad5e12c4",
+    "productName": "Ripon show",
+    "dealerId": "6ae8a57e44eefd49ad5e12aa",
+    "dealerName": "Akij",
+    "note": "",
+    "imageData": "/uploads/dealer-receipts/rcpt_1793631661063_ltwndd.jpg",
+    "imageFileName": "rcpt_1793631661063_ltwndd.jpg",
+    "createdAt": "2026-11-02T15:00:43.458Z"
+  }
+]
