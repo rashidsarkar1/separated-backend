@@ -27,7 +27,7 @@ router.get(
     const skip = (pageNum - 1) * limitNum;
     const rangeStart = getDateRangeStart(String(range));
     const searchTerm = String(search).trim();
-    const escapedSearch = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const searchTerms = searchTerm.split(/\s+/).filter(Boolean);
 
     if (mongoose.connection.readyState === 1) {
       try {
@@ -60,14 +60,19 @@ router.get(
         if (rangeStart) match.createdAt = { $gte: rangeStart };
         if (dealerId) match.dealerId = String(dealerId);
         if (category) match.category = String(category);
-        if (searchTerm) {
-          match.$or = [
-            { name: { $regex: escapedSearch, $options: "i" } },
-            { displayName: { $regex: escapedSearch, $options: "i" } },
-            { category: { $regex: escapedSearch, $options: "i" } },
-            { sku: { $regex: escapedSearch, $options: "i" } },
-            { stringId: { $regex: escapedSearch, $options: "i" } },
-          ];
+        if (searchTerms.length > 0) {
+          match.$and = searchTerms.map((term) => {
+            const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            return {
+              $or: [
+                { name: { $regex: escapedTerm, $options: "i" } },
+                { displayName: { $regex: escapedTerm, $options: "i" } },
+                { category: { $regex: escapedTerm, $options: "i" } },
+                { sku: { $regex: escapedTerm, $options: "i" } },
+                { stringId: { $regex: escapedTerm, $options: "i" } },
+              ],
+            };
+          });
         }
 
         if (status === "low") {
@@ -129,7 +134,6 @@ router.get(
     }
 
     // In-memory fallback
-    const searchStr = (search as string).toLowerCase().trim();
     let filtered = localStore.products
       .filter((p) => p.isDeleted === (status === "deleted"))
       .map((p) => {
@@ -160,14 +164,24 @@ router.get(
       );
     }
 
-    if (searchStr) {
+    if (searchTerms.length > 0) {
       filtered = filtered.filter(
-        (p) =>
-          p.name.toLowerCase().includes(searchStr) ||
-          (p.displayName && p.displayName.toLowerCase().includes(searchStr)) ||
-          (p.category && p.category.toLowerCase().includes(searchStr)) ||
-          p._id.toLowerCase().includes(searchStr) ||
-          (p.sku && p.sku.toLowerCase().includes(searchStr)),
+        (p) => {
+          const searchableValues = [
+            p.name,
+            p.displayName,
+            p.category,
+            p._id,
+            p.sku,
+          ]
+            .filter(Boolean)
+            .map((value) => String(value).toLowerCase());
+          return searchTerms.every((term) =>
+            searchableValues.some((value) =>
+              value.includes(term.toLowerCase()),
+            ),
+          );
+        },
       );
     }
 
