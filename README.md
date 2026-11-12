@@ -9,7 +9,7 @@ Express + TypeScript API with feature-based routes and Mongoose models. Dealer r
 3. Run `npm install`, then `npm run dev` (or `npm start`).
 4. Check `http://localhost:3000/api/health`.
 
-`CLIENT_URL` accepts a comma-separated list of frontend origins. API base path: `/api/v1`.
+`CLIENT_URL` accepts a comma-separated list of frontend origins. In development, HTTPS origins under `*.devtunnels.ms` are also accepted for remote previews; production remains restricted to `CLIENT_URL`. API base path: `/api/v1`.
 
 ## Structure
 

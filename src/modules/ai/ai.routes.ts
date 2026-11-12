@@ -61,7 +61,7 @@ Do not use conversational greetings or filler text. Return exactly 3 high-impact
 
 /**
  * POST /api/v1/ai/insights
- * Generates inventory and sales actionable insights using gemini-3.8-flash on the server.
+ * Generates inventory and sales actionable insights using Gemini 3.8 Flash on the server.
  */
 router.post(
   '/insights',
@@ -182,7 +182,7 @@ router.get(
 
 /**
  * POST /api/v1/ai/generate
- * Generic text generation route powered by gemini-3.8-flash on the server
+ * Generic text generation route powered by Gemini 3.8 Flash on the server
  */
 router.post(
   '/generate',

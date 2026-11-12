@@ -1,12 +1,10 @@
+import "dotenv/config";
 import express, { type Application } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import mongoose from "mongoose";
-import dotenv from "dotenv";
 import router from "./src/routes/index";
 import { globalErrorHandler } from "./src/middleware/globalErrorHandler";
-
-dotenv.config();
 
 const app: Application = express();
 const port = Number(process.env.PORT) || 3000;
@@ -68,7 +66,18 @@ export function ensureDatabaseConnection(): Promise<void> {
 const allowedOrigins = (process.env.CLIENT_URL || "http://localhost:5173")
   .split(",").map((origin) => origin.trim()).filter(Boolean);
 app.use(cors({ origin: (origin, callback) => {
-  if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+  const isDevelopmentTunnel = (() => {
+    if (process.env.NODE_ENV !== "development") return false;
+    try {
+      const url = new URL(origin || "");
+      return url.protocol === "https:" && url.hostname.endsWith(".devtunnels.ms");
+    } catch {
+      return false;
+    }
+  })();
+  if (!origin || allowedOrigins.includes(origin) || isDevelopmentTunnel) {
+    return callback(null, true);
+  }
   return callback(new Error(`Origin ${origin} is not allowed by CLIENT_URL`));
 }, credentials: true }));
 app.use(express.json({ limit: runningOnVercel ? "4.2mb" : "20mb" }));

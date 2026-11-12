@@ -210,6 +210,107 @@ router.get(
 );
 
 router.get(
+  "/valuation-summary",
+  catchAsync(async (_req, res) => {
+    let summary:
+      | {
+          productCount: number;
+          totalQuantity: number;
+          stockValue: number;
+          retailValue: number;
+        }
+      | undefined;
+
+    if (mongoose.connection.readyState === 1) {
+      try {
+        const [result] = await Product.aggregate([
+          { $match: { isDeleted: false } },
+          {
+            $lookup: {
+              from: "stockitems",
+              let: { productId: { $toString: "$_id" } },
+              pipeline: [
+                { $match: { $expr: { $eq: ["$productId", "$$productId"] } } },
+              ],
+              as: "stockItems",
+            },
+          },
+          {
+            $addFields: {
+              quantity: { $sum: "$stockItems.quantity" },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              productCount: { $sum: 1 },
+              totalQuantity: { $sum: { $ifNull: ["$quantity", 0] } },
+              stockValue: {
+                $sum: {
+                  $multiply: [
+                    { $ifNull: ["$buyPrice", 0] },
+                    { $ifNull: ["$quantity", 0] },
+                  ],
+                },
+              },
+              retailValue: {
+                $sum: {
+                  $multiply: [
+                    { $ifNull: ["$sellPrice", 0] },
+                    { $ifNull: ["$quantity", 0] },
+                  ],
+                },
+              },
+            },
+          },
+        ]);
+        summary = result || {
+          productCount: 0,
+          totalQuantity: 0,
+          stockValue: 0,
+          retailValue: 0,
+        };
+      } catch (err) {
+        console.warn(
+          "DB inventory valuation failed, falling back to localStore:",
+          err,
+        );
+      }
+    }
+
+    if (!summary) {
+      const activeProducts = localStore.products.filter(
+        (product) => !product.isDeleted,
+      );
+      summary = activeProducts.reduce(
+        (totals, product) => {
+          const quantity = localStore.stock
+            .filter((stock) => stock.productId === product._id)
+            .reduce((sum, stock) => sum + (Number(stock.quantity) || 0), 0);
+          totals.totalQuantity += quantity;
+          totals.stockValue += (Number(product.buyPrice) || 0) * quantity;
+          totals.retailValue += (Number(product.sellPrice) || 0) * quantity;
+          return totals;
+        },
+        {
+          productCount: activeProducts.length,
+          totalQuantity: 0,
+          stockValue: 0,
+          retailValue: 0,
+        },
+      );
+    }
+
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: "Inventory valuation fetched successfully",
+      data: summary,
+    });
+  }),
+);
+
+router.get(
   "/:id",
   catchAsync(async (req, res) => {
     const { id } = req.params;

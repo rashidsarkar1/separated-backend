@@ -10,7 +10,7 @@ export interface InventoryInsightsParams {
 
 /**
  * Fetches AI-generated inventory insights from the backend server.
- * The backend manages the Gemini API call securely using gemini-3.8-flash.
+ * The backend manages the Gemini API call securely using Gemini 3.8 Flash.
  */
 export async function getInventoryInsights(params?: InventoryInsightsParams): Promise<string> {
   try {
