@@ -111,6 +111,9 @@ export function ProductDetails({
   const [intelligenceLoading, setIntelligenceLoading] = useState(false);
   const [lastSalePrices, setLastSalePrices] = useState<any[]>([]);
   const [receipts, setReceipts] = useState<DealerReceipt[]>([]);
+  const [fetchedProduct, setFetchedProduct] = useState<any>(null);
+  const [productLoading, setProductLoading] = useState(false);
+  const [productError, setProductError] = useState("");
 
   useEffect(() => {
     setLeaderboardPage(1);
@@ -196,6 +199,39 @@ export function ProductDetails({
     }
   }, [dispatch, products.length, dealers.length]);
 
+  useEffect(() => {
+    if (!productId) {
+      setFetchedProduct(null);
+      setProductError("");
+      setProductLoading(false);
+      return;
+    }
+
+    let active = true;
+    setFetchedProduct(null);
+    setProductError("");
+    setProductLoading(true);
+    apiService
+      .getProductById(productId)
+      .then((result) => {
+        if (active) setFetchedProduct(result);
+      })
+      .catch((error) => {
+        if (active) {
+          setProductError(
+            error.response?.data?.message || "Failed to load product details",
+          );
+        }
+      })
+      .finally(() => {
+        if (active) setProductLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [productId]);
+
   const loadReceipts = async () => {
     if (!productId) {
       setReceipts([]);
@@ -215,8 +251,15 @@ export function ProductDetails({
 
   // Current product
   const product = useMemo(() => {
-    return products.find((p) => p._id === productId || p.id === productId);
-  }, [products, productId]);
+    const inventoryProduct = products.find(
+      (p) => p._id === productId || p.id === productId,
+    );
+    if (inventoryProduct) return inventoryProduct;
+    return String(fetchedProduct?._id || fetchedProduct?.id || "") ===
+      String(productId || "")
+      ? fetchedProduct
+      : undefined;
+  }, [products, productId, fetchedProduct]);
 
   // Dealer info
   const dealer = useMemo(() => {
@@ -298,6 +341,29 @@ export function ProductDetails({
   };
 
   if (!product) {
+    if (productLoading) {
+      return (
+        <div className="p-8 text-center text-sm font-medium text-slate-500">
+          Loading product details...
+        </div>
+      );
+    }
+
+    if (productId && productError) {
+      return (
+        <div className="p-8 text-center space-y-4 max-w-lg mx-auto">
+          <Package className="w-16 h-16 text-slate-300 mx-auto" />
+          <h2 className="text-xl font-bold text-slate-800">
+            Unable to Load Product
+          </h2>
+          <p className="text-xs text-rose-600">{productError}</p>
+          <Button onClick={onBack} variant="outline" className="mt-4">
+            ← Back to Inventory
+          </Button>
+        </div>
+      );
+    }
+
     return (
       <div className="p-8 text-center space-y-4 max-w-lg mx-auto">
         <Package className="w-16 h-16 text-slate-300 mx-auto" />

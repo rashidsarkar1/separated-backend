@@ -69,7 +69,9 @@ router.get(
                 { displayName: { $regex: escapedTerm, $options: "i" } },
                 { category: { $regex: escapedTerm, $options: "i" } },
                 { sku: { $regex: escapedTerm, $options: "i" } },
-                { stringId: { $regex: escapedTerm, $options: "i" } },
+                ...(searchTerms.length === 1
+                  ? [{ stringId: { $regex: escapedTerm, $options: "i" } }]
+                  : []),
               ],
             };
           });
@@ -171,8 +173,8 @@ router.get(
             p.name,
             p.displayName,
             p.category,
-            p._id,
             p.sku,
+            ...(searchTerms.length === 1 ? [p._id] : []),
           ]
             .filter(Boolean)
             .map((value) => String(value).toLowerCase());
