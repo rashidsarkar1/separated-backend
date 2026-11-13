@@ -11,6 +11,8 @@ Express + TypeScript API with feature-based routes and Mongoose models. Dealer r
 
 `CLIENT_URL` accepts a comma-separated list of frontend origins. In development, HTTPS origins under `*.devtunnels.ms` are also accepted for remote previews; production remains restricted to `CLIENT_URL`. API base path: `/api/v1`.
 
+The admin login is configured only with `ADMIN_USERNAME` and `ADMIN_PASSWORD`. On startup, the backend syncs the configured account to MongoDB's `adminaccounts` collection and stores only a bcrypt password hash. `/api/v1/auth/login` is the only public API; every other endpoint, including `/api/health`, requires `Authorization: Bearer <token>`. Access tokens expire after one day, after which the frontend returns to login and protected API requests are rejected. Keep `JWT_SECRET` private and change the admin credentials through the backend environment, then restart/redeploy the backend.
+
 ## Structure
 
 - `server.ts`: Express app, database connection, middleware, health route, and API mounting

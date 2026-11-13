@@ -1,65 +1,83 @@
-import { Router } from 'express';
-import catchAsync from '../../shared/catchasync';
-import sendResponse from '../../utils/sendResponse';
-import { AppError } from '../../utils/AppError';
-import jwt from 'jsonwebtoken';
-import bcrypt from 'bcrypt';
+import { Router } from "express";
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
+import catchAsync from "../../shared/catchasync";
+import { AppError } from "../../utils/AppError";
+import sendResponse from "../../utils/sendResponse";
+import { requireAuth } from "../../middleware/requireAuth";
+import { AdminAccount } from "./auth.model";
 
 const router = Router();
 
 router.post(
-  '/login',
+  "/login",
   catchAsync(async (req, res) => {
-    const { username, password } = req.body;
-
-    const rawAdminUsername = process.env.ADMIN_USERNAME || 'admin';
-    const rawAdminPass = process.env.ADMIN_PASSWORD || 'admin123';
-
-    const adminUsername = rawAdminUsername.trim();
-    const adminPass = rawAdminPass.trim();
-
-    const submittedUsername = (username || '').toString().trim();
-    const submittedPassword = (password || '').toString().trim();
-
-    console.log(`[Auth Debug] Comparing User: "${submittedUsername}" (len: ${submittedUsername.length}) vs "${adminUsername}" (len: ${adminUsername.length})`);
-    console.log(`[Auth Debug] Comparing Pass: "${submittedPassword}" (len: ${submittedPassword.length}) vs "${adminPass}" (len: ${adminPass.length})`);
+    const submittedUsername =
+      typeof req.body?.username === "string" ? req.body.username.trim() : "";
+    const submittedPassword =
+      typeof req.body?.password === "string" ? req.body.password : "";
 
     if (!submittedUsername || !submittedPassword) {
-      throw new AppError(400, 'Username and password are required');
+      throw new AppError(400, "Username and password are required");
+    }
+    if (mongoose.connection.readyState !== 1) {
+      throw new AppError(503, "Authentication database is unavailable");
     }
 
-    if (submittedUsername !== adminUsername) {
-      console.warn(`[Auth] Username mismatch`);
-      throw new AppError(401, 'Unauthorized: Invalid username');
+    const account = await AdminAccount.findById("primary-admin")
+      .select("+passwordHash")
+      .lean();
+    if (!account?.passwordHash) {
+      throw new AppError(503, "Admin authentication account is unavailable");
     }
-
-    if (submittedPassword !== adminPass) {
-      console.warn(`[Auth] Password mismatch`);
-      // DEBUG ONLY: Remove this before production
-      throw new AppError(401, `Unauthorized: Invalid password. Submitted: "${submittedPassword}" (${submittedPassword.length}), Expected: "${adminPass}" (${adminPass.length})`);
-    }
-
-    console.log(`[Auth] Success for user: ${submittedUsername}`);
-
-    const token = jwt.sign(
-      { username, role: 'admin' },
-      process.env.JWT_SECRET || 'secret',
-      { expiresIn: '1d' }
+    const passwordMatches = await bcrypt.compare(
+      submittedPassword,
+      account.passwordHash,
     );
+    if (submittedUsername !== account.username || !passwordMatches) {
+      throw new AppError(401, "Invalid username or password");
+    }
 
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 24 * 60 * 60 * 1000,
-    });
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      throw new AppError(503, "Authentication is not configured");
+    }
+    const token = jwt.sign(
+      { username: account.username, role: "admin" },
+      secret,
+      { expiresIn: "1d", algorithm: "HS256" },
+    );
+    const expiresAt =
+      (jwt.decode(token) as jwt.JwtPayload).exp! * 1000;
 
     sendResponse(res, {
       statusCode: 200,
       success: true,
-      message: 'Login successful',
-      data: { token, user: { username, role: 'admin' } },
+      message: "Login successful",
+      data: {
+        token,
+        expiresAt,
+        user: { username: account.username, role: "admin" },
+      },
     });
-  })
+  }),
+);
+
+router.get(
+  "/me",
+  requireAuth,
+  catchAsync(async (req, res) => {
+    const authorization = req.header("authorization") || "";
+    const token = authorization.replace(/^Bearer\s+/i, "");
+    const payload = jwt.verify(token, process.env.JWT_SECRET!) as jwt.JwtPayload;
+    sendResponse(res, {
+      statusCode: 200,
+      success: true,
+      message: "Session is valid",
+      data: { username: payload.username, role: payload.role },
+    });
+  }),
 );
 
 export const AuthRoutes = router;

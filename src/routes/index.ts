@@ -10,14 +10,14 @@ import { AIRoutes } from "../modules/ai/ai.routes";
 import { dealerReceiptRoutes } from "../modules/dealer-receipts/dealer-receipt.routes";
 import { CategoryRoutes } from "../modules/categories/category.routes";
 import { ExpenseRoutes } from "../modules/expenses/expense.routes";
+import { requireAuth } from "../middleware/requireAuth";
 
 const router = Router();
 
+router.use("/auth", AuthRoutes);
+router.use(requireAuth);
+
 const moduleRoutes = [
-  {
-    path: "/auth",
-    route: AuthRoutes,
-  },
   {
     path: "/inventory",
     route: InventoryRoutes,

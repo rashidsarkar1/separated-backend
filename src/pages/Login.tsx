@@ -7,31 +7,18 @@ import { toast } from 'sonner';
 import { apiService } from '../services/apiService';
 
 export function Login({ onLogin }: { onLogin: (user: any) => void }) {
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('admin123');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-
-  // Auto-fill effect to ensure values are set if they somehow get cleared
-  React.useEffect(() => {
-    if (!username) setUsername('admin');
-    if (!password) setPassword('admin123');
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     try {
-      console.log("[Login] Attempting login with:", { 
-        username, 
-        passwordLength: password.length,
-        passwordPreview: password.substring(0, 2) + "..." 
-      });
       const response = await apiService.login({ username, password });
-      console.log("[Login] Success response:", response);
       onLogin(response.data.user);
       toast.success("Identity Verified", { description: "Session encrypted and authorized." });
     } catch (error: any) {
-      console.error("[Login Error]", error);
       toast.error("Access Denied", { 
         description: error.response?.data?.message || "Check your network connection and credentials." 
       });
