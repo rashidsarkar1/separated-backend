@@ -99,6 +99,18 @@ export interface LocalSettings {
   footerText: string;
 }
 
+export interface LocalExpense {
+  _id: string;
+  title: string;
+  amount: number;
+  category: string;
+  frequency: "once" | "daily" | "weekly" | "monthly";
+  startDate: string;
+  endDate?: string;
+  note?: string;
+  createdAt: string;
+}
+
 export const localStore = {
   products: [] as LocalProduct[],
   stock: [] as LocalStockItem[],
@@ -106,6 +118,12 @@ export const localStore = {
   adjustments: [] as LocalCustomerAdjustment[],
   dealers: [] as LocalDealer[],
   transactions: [] as LocalTransaction[],
+  expenses: [] as LocalExpense[],
+  expenseCategories: [] as {
+    _id: string;
+    name: string;
+    normalizedName: string;
+  }[],
   settings: {
     _id: "settings_default",
     shopName: "Wholesale OS",

@@ -9,6 +9,7 @@ import { settingsRoutes } from "../modules/settings/settings.routes";
 import { AIRoutes } from "../modules/ai/ai.routes";
 import { dealerReceiptRoutes } from "../modules/dealer-receipts/dealer-receipt.routes";
 import { CategoryRoutes } from "../modules/categories/category.routes";
+import { ExpenseRoutes } from "../modules/expenses/expense.routes";
 
 const router = Router();
 
@@ -24,6 +25,10 @@ const moduleRoutes = [
   {
     path: "/categories",
     route: CategoryRoutes,
+  },
+  {
+    path: "/expenses",
+    route: ExpenseRoutes,
   },
   {
     path: "/transactions",
