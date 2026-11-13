@@ -187,7 +187,7 @@ router.get(
 router.post(
   '/generate',
   catchAsync(async (req, res) => {
-    const { prompt, systemInstruction } = req.body;
+    const { prompt, systemInstruction } = req.body || {};
 
     if (!prompt) {
       return sendResponse(res, {
@@ -198,29 +198,37 @@ router.post(
       });
     }
 
-    try {
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
-        contents: prompt,
-        config: systemInstruction ? { systemInstruction } : undefined,
-      });
+    const primaryModel =
+      process.env.GEMINI_NAME_MODEL?.trim() || 'gemini-3.5-flash-lite';
+    const models = [...new Set([primaryModel, 'gemini-3.8-flash'])];
 
-      sendResponse(res, {
-        statusCode: 200,
-        success: true,
-        data: {
-          text: response.text,
-        },
-      });
-    } catch (err: any) {
-      console.error('Server Gemini Generate Error:', err);
-      sendResponse(res, {
-        statusCode: 500,
-        success: false,
-        message: 'Failed to generate content',
-        data: null,
-      });
+    for (const model of models) {
+      try {
+        const response = await ai.models.generateContent({
+          model,
+          contents: prompt,
+          config: systemInstruction ? { systemInstruction } : undefined,
+        });
+        const text = response.text?.trim();
+        if (!text) throw new Error(`Gemini model ${model} returned no text`);
+
+        return sendResponse(res, {
+          statusCode: 200,
+          success: true,
+          data: { text },
+        });
+      } catch (error) {
+        console.error(`Server Gemini Generate Error (${model}):`, error);
+      }
     }
+
+    return sendResponse(res, {
+      statusCode: 503,
+      success: false,
+      message:
+        'AI name suggestion is unavailable. Check GEMINI_API_KEY and model access, then try again.',
+      data: null,
+    });
   })
 );
 
